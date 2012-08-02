@@ -220,6 +220,7 @@ class UboxHack
             $this->setPlatform($platform);
 			$array = array('device_no'=>$this->device_no);
             $r = $this->request('app/newGetAppInfo', $array);
+            file_put_contents('/tmp/ubox_gift.log', json_encode($r) . "\n", FILE_APPEND);
             if (isset($r['data']) && !empty($r['data'])) {
                 $ret[$platform]['task'] = $r['data'];
 				$coupons = array();
@@ -249,6 +250,40 @@ class UboxHack
 			'template_id'	=>	$coupon_id,
         );
         return $this->request('app/newCreateCoupon', $array);
+    }
+    
+    public function user_isUser($phone)
+    {
+        $array = array(
+            'device_no' =>  $this->device_no,
+            'phone'		=>	$phone,
+        );
+        return $this->request('user/isUser', $array);
+    }
+    
+    public function coupon_couponNewAdminList($gift_status='free')
+    {
+        $array = array(
+            'device_no' =>  $this->device_no,
+            'page'		=>	1,
+            'count'		=>	50,
+            'coupon_status'	=>	$gift_status, # free,voucher
+        );
+        return $this->request('coupon/couponNewAdminList', $array);
+    }
+    
+    
+    
+    public function coupon_presentCoupon($fuid, $phone, $coupon_id)
+    {
+        $array = array(
+            'device_no' =>  $this->device_no,
+            'phone'		=>	$phone,
+            'friend_id'	=>	$fuid,
+            'couponId'	=>	$coupon_id,
+            'friend_name'	=>	'aaa',
+        );
+        return $this->request('coupon/presentCoupon', $array);
     }
 }
 

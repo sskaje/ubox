@@ -27,11 +27,18 @@ case 'request':
 	if (!isset($_REQUEST['login']) || !isset($_REQUEST['password'])) {
 		die('Missing fields');
 	}
+	if (!isset($_REQUEST['gift_phone'])) {
+		$_REQUEST['gift_phone'] = '';
+	}
 	if (!isset($_REQUEST['coupon_ids'])) {
 		$_REQUEST['coupon_ids'] = array();
 	}
 	$login = $_REQUEST['login'];
 	$password = $_REQUEST['password'];
+	$gift_phone = $_REQUEST['gift_phone'];
+	if ($login == $gift_phone) {
+		$gift_phone = '';
+	}
 	$coupon_ids = array_map('intval', (array) $_REQUEST['coupon_ids']);
 	
 	$obj = new UboxHack($login_as, $login, $password);
@@ -42,7 +49,9 @@ case 'request':
 			$uid, 
 			$login_as == UboxHack::AS_PHONE ? $login : '',
 			$login_as == UboxHack::AS_PHONE ? '' : $login ,
-			$password, $coupon_ids
+			$password, 
+			$coupon_ids,
+			$gift_phone
 		);
 		if ($ret) {
 			if ($action == 'request') {
@@ -109,7 +118,25 @@ var_dump($coupon_id);
 var_dump($r);
 			}
 		}
-
+		if ($u['gift_phone']) {
+			# is user
+			$gu = $obj->user_isUser($u['gift_phone']);
+			if (isset($gu['user_id'])) {
+				echo "GIFT NOW\n";
+				# list
+				$cl = $obj->coupon_couponNewAdminList('free');
+				# loop gift
+				if (isset($cl['couponList']['data']) && !empty($cl['couponList']['data'])) {
+					foreach ($cl['couponList']['data'] as $coupon) {
+						if ($coupon['canPresent'] == 'yes') {
+							$r = $obj->coupon_presentCoupon($gu['user_id'], $u['gift_phone'], $coupon['id']);
+							var_dump($r);
+						}
+					}
+				}
+				
+			}
+		}
 	}
 	break;
 
@@ -126,6 +153,8 @@ Password: <input type="text" name="password" /> <br />
 <label><input type="checkbox" name="coupon_ids[]" value="20" />鲜橙多</label>
 
 <br />
+Send Gift To: <input type="text" name="gift_phone" />（phone no）
+<br />
 <input type="hidden" name="login_as" value="0" />
 <input type="submit" name="action" value="login" /> = 
 <input type="submit" name="action" value="request" />
@@ -134,7 +163,7 @@ Password: <input type="text" name="password" /> <br />
 Notice: <br />
 Your ubox login and password will be recorded when you click either 'login' or 'request', i think you know why. <br />
 It's recommended to use a weak/low-level password if you're not about to leave some money in ur account. <br />
-
+<a href="http://sskaje.me/">&copy;sskaje</a>
 REGISTER;
 	break;
 }
@@ -148,11 +177,11 @@ class UboxUser
 		$this->db = new mysqli($config['host'], $config['user'], $config['pass'], $config['name'], $config['port']);
 	}
 
-	public function add($uid, $phone, $email, $password, array $coupon_ids=array())
+	public function add($uid, $phone, $email, $password, array $coupon_ids=array(), $gift_phone='')
 	{
 		$coupon_ids = json_encode($coupon_ids);
-		$stmt = $this->db->prepare('REPLACE INTO `ubox_user` SET `uid`=?, `phone`=?, `email`=?, `password`=?, `coupon_ids`=?');
-		$stmt->bind_param('issss', $uid, $phone, $email, $password, $coupon_ids);
+		$stmt = $this->db->prepare('REPLACE INTO `ubox_user` SET `uid`=?, `phone`=?, `email`=?, `password`=?, `coupon_ids`=?, `gift_phone`=?');
+		$stmt->bind_param('isssss', $uid, $phone, $email, $password, $coupon_ids, $gift_phone);
 		$ret = $stmt->execute();
 		return $ret;
 	}
