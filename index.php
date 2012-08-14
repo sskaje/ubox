@@ -1,5 +1,6 @@
 <?php
 header('Content-type: text/html; charset=utf-8');
+require(__DIR__ . '/config.php');
 require(__DIR__ . '/hack.class.php');
 
 if (PHP_SAPI == 'cli') {
@@ -8,17 +9,9 @@ if (PHP_SAPI == 'cli') {
 	$action = isset($_REQUEST['action']) ? $_REQUEST['action'] : '';
 }
 
-$dbconfig = array(
-	'host'  =>  '127.0.0.1',
-	'user'  =>  'ubox_hack',
-	'pass'  =>  'ubox_passpasspass',
-	'name'  =>  'ubox_hack',
-	'port'  =>  3306,
-);
-
 switch ($action) {
 case 'login':
-case 'request':
+case 'gift':
 	if (!isset($_REQUEST['login_as']) || !$_REQUEST['login_as']) {
 		$login_as = UboxHack::AS_PHONE;
 	} else {
@@ -39,11 +32,15 @@ case 'request':
 	if ($login == $gift_phone) {
 		$gift_phone = '';
 	}
-	$coupon_ids = array_map('intval', (array) $_REQUEST['coupon_ids']);
 	
-	$obj = new UboxHack($login_as, $login, $password);
-	$uid = $obj->login();
-	if ($uid) {
+	$coupon_ids = array_map('intval', (array) $_REQUEST['coupon_ids']);
+	if ($action == 'login') {
+		$test_flag = hack($login_as, $login, $password, $uid, $coupon_ids) && $uid;
+	} else {
+		$test_flag = gift($login_as, $login, $password, $uid, $gift_phone) && $uid;
+	}
+	
+	if ($test_flag) {
 		$userobj = new UboxUser($dbconfig);
 		$ret = $userobj->add(
 			$uid, 
@@ -54,33 +51,7 @@ case 'request':
 			$gift_phone
 		);
 		if ($ret) {
-			if ($action == 'request') {
-				$appinfo = $obj->app_newGetAppInfo();
-
-				foreach ($appinfo as $platform=>$apps) {
-					$obj->setPlatform($platform);
-					$intersect = array_intersect($coupon_ids, $apps['coupon']);
-					if (!empty($intersect)) {
-						$coupon_ids = $intersect;
-					} else {
-						$coupon_ids = $apps['coupon'];
-					}
-					foreach ($apps['task'] as $a) {
-						$app_id = $a['app_id'];
-
-						# claim task
-						$r = $obj->app_newReceiveTask($app_id); 
-		var_dump($r);echo '<br />';
-						$coupon_id = $coupon_ids[array_rand($coupon_ids)];
-var_dump($coupon_id);echo '<br />';
-						$r = $obj->app_newCreateCoupon($app_id, $coupon_id);
-		var_dump($r);echo '<br />';
-					}
-				}
-				echo 'Uid: ' . $uid;exit;
-			} else {
-				die('User added as uid:' . $uid);
-			}
+			die('User added as uid:' . $uid);
 		} else {
 			die('Failed to add user, already exists? uid:'.$uid);
 		}
@@ -95,47 +66,10 @@ case 'cron':
 	foreach ($users as $u) {
 		$login_as = $u['phone'] ? UboxHack::AS_PHONE : UboxHack::AS_EMAIL;
 		$login	= $u['phone'] ? $u['phone'] : $u['email'];
-		$obj = new UboxHack($login_as, $login, $u['password'], $u['uid']);
-		$obj->login();
-		$appinfo = $obj->app_newGetAppInfo();
-		foreach ($appinfo as $platform=>$apps) {
-			$obj->setPlatform($platform);
-			$intersect = array_intersect($u['coupon_ids'], $apps['coupon']);
-			if (!empty($intersect)) {
-				$coupon_ids = $intersect;
-			} else {
-				$coupon_ids = $apps['coupon'];
-			}
-			foreach ($apps['task'] as $a) {
-				$app_id = $a['app_id'];
-
-				# claim task
-				$r = $obj->app_newReceiveTask($app_id); 
-var_dump($r);
-				$coupon_id = $coupon_ids[array_rand($coupon_ids)];
-var_dump($coupon_id);
-				$r = $obj->app_newCreateCoupon($app_id, $coupon_id);
-var_dump($r);
-			}
-		}
+		hack($login_as, $login, $u['password'], $u['uid'], $u['coupon_ids']);
+		
 		if ($u['gift_phone']) {
-			# is user
-			$gu = $obj->user_isUser($u['gift_phone']);
-			if (isset($gu['user_id'])) {
-				echo "GIFT NOW\n";
-				# list
-				$cl = $obj->coupon_couponNewAdminList('free');
-				# loop gift
-				if (isset($cl['couponList']['data']) && !empty($cl['couponList']['data'])) {
-					foreach ($cl['couponList']['data'] as $coupon) {
-						if ($coupon['canPresent'] == 'yes') {
-							$r = $obj->coupon_presentCoupon($gu['user_id'], $u['gift_phone'], $coupon['id']);
-							var_dump($r);
-						}
-					}
-				}
-				
-			}
+			gift($login_as, $login, $u['password'], $uid['uid'], $u['gift_phone']);
 		}
 	}
 	break;
@@ -156,16 +90,120 @@ Password: <input type="text" name="password" /> <br />
 Send Gift To: <input type="text" name="gift_phone" />（phone no）
 <br />
 <input type="hidden" name="login_as" value="0" />
-<input type="submit" name="action" value="login" /> = 
-<input type="submit" name="action" value="request" />
+<input type="submit" name="action" value="login" />
+<input type="submit" name="action" value="gift" />
 </form>
 
+Click 'login' to: claim a new task and finish it.<br />
+Click 'gift' to: send all coupons to 'gift phone' if possible.<br />
 Notice: <br />
-Your ubox login and password will be recorded when you click either 'login' or 'request', i think you know why. <br />
+Your ubox login and password will be recorded when you click either 'login' or 'gift', i think you know why. <br />
 It's recommended to use a weak/low-level password if you're not about to leave some money in ur account. <br />
 <a href="http://sskaje.me/">&copy;sskaje</a>
 REGISTER;
 	break;
+}
+
+function getAnswers()
+{
+	static $answers = array();
+	if (empty($answers)) {
+		global $answer_file;
+		$examdb = file($answer_file);
+		if (empty($examdb)) {
+			die('please place your answers to ' . $answer_file . ', content: app_xx|A|xxxxxxxxxxxx (app_id|answer|sn)');
+		}
+		
+		foreach ($examdb as $f) {
+			$t = explode('|', trim($f));
+			if (isset($t[2])) {
+				$answers[$t[0]][$t[2]] = $t[1];
+			}
+		}
+	}
+	
+	return $answers;
+}
+
+function hack($login_as, $login, $password, & $uid=0, $user_coupon_list=array())
+{
+	$obj = new UboxHack($login_as, $login, $password, $uid);
+	$uid = $obj->login();
+	if (empty($uid)) {
+		echo "$login failed\n";
+		return false;
+	}
+	$r = $obj->app_newGetAppList();
+	$answers = getAnswers();
+
+	foreach ($r as $platform=>$app_coupons) {
+		$obj->setPlatform($platform);
+		if (isset($app_coupons['no'])) {
+			foreach ($app_coupons['no'] as $app_id => $coupon_ids) {
+				if (!empty($user_coupon_list)) {
+					$intersect = array_intersect($user_coupon_list, $coupon_ids);
+				} else {
+					$intersect = $coupon_ids;
+				}
+				$coupon_id = $intersect[array_rand($intersect)];
+				
+				$r = $obj->app_exchangeCoupon($app_id , $coupon_id);
+				var_dump($r);
+			}
+		}
+		if (isset($app_coupons['yes'])) {
+			foreach ($app_coupons['yes'] as $app_id => $coupon_ids) {
+				if (!empty($user_coupon_list)) {
+					$intersect = array_intersect($user_coupon_list, $coupon_ids);
+				} else {
+					$intersect = $coupon_ids;
+				}
+				$coupon_id = $intersect[array_rand($intersect)];
+			
+				$r = $obj->app_receTask($app_id);
+				$r = $obj->app_getExam($app_id);
+				if (!isset($answers[$app_id][$r['sn']])) {
+					die('Answer not found: app_id='.$app_id.', sn='.$r['sn']);
+				}
+				$r = $obj->app_answerExam($app_id, $r['sn'], $answers[$app_id][$r['sn']]);
+				$r = $obj->app_exchangeCoupon($app_id, $coupon_id);
+
+				var_dump($r);
+			}
+		}
+	}
+	
+	return true;
+}
+
+function gift($login_as, $login, $password, & $uid=0, $gift_phone)
+{
+	$obj = new UboxHack($login_as, $login, $password, $uid);
+	$uid = $obj->login();
+	if (empty($uid)) {
+		echo "$login failed\n";
+		return false;
+	}
+	if ($gift_phone) {
+		# is user
+		$gu = $obj->user_isUser($gift_phone);
+		if (isset($gu['user_id'])) {
+			echo "GIFT NOW\n";
+			# list
+			$cl = $obj->coupon_couponNewAdminList('free');
+			# loop gift
+			if (isset($cl['couponList']['data']) && !empty($cl['couponList']['data'])) {
+				foreach ($cl['couponList']['data'] as $coupon) {
+					if ($coupon['canPresent'] == 'yes') {
+						$r = $obj->coupon_presentCoupon($gu['user_id'], $gift_phone, $coupon['id']);
+						var_dump($r);
+					}
+				}
+			}
+		}
+		return true;
+	}
+	return false;
 }
 
 class UboxUser
