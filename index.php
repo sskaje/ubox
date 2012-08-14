@@ -73,7 +73,7 @@ case 'cron_gift':
 		}
 		
 		if ($u['gift_phone']) {
-			gift($login_as, $login, $u['password'], $uid['uid'], $u['gift_phone']);
+			gift($login_as, $login, $u['password'], $u['uid'], $u['gift_phone']);
 		}
 	}
 	break;
@@ -192,7 +192,7 @@ function gift($login_as, $login, $password, & $uid=0, $gift_phone)
 		# is user
 		$gu = $obj->user_isUser($gift_phone);
 		if (isset($gu['user_id'])) {
-			echo "GIFT NOW\n";
+			echo "GIFT NOW: {$uid}->{$gift_phone}\n";
 			# list
 			$cl = $obj->coupon_couponNewAdminList('free');
 			# loop gift
@@ -204,6 +204,8 @@ function gift($login_as, $login, $password, & $uid=0, $gift_phone)
 					}
 				}
 			}
+		} else {
+			echo "Invalid Phone {$gift_phone}\n";
 		}
 		return true;
 	}
