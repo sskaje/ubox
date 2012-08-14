@@ -61,12 +61,16 @@ case 'gift':
 	break;
 
 case 'cron':
+case 'cron_gift':
 	$userobj = new UboxUser($dbconfig);
 	$users = $userobj->findAll();
 	foreach ($users as $u) {
 		$login_as = $u['phone'] ? UboxHack::AS_PHONE : UboxHack::AS_EMAIL;
 		$login	= $u['phone'] ? $u['phone'] : $u['email'];
-		hack($login_as, $login, $u['password'], $u['uid'], $u['coupon_ids']);
+		
+		if ($action == 'cron') {
+			hack($login_as, $login, $u['password'], $u['uid'], $u['coupon_ids']);
+		}
 		
 		if ($u['gift_phone']) {
 			gift($login_as, $login, $u['password'], $uid['uid'], $u['gift_phone']);
