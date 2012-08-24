@@ -149,7 +149,11 @@ function hack($login_as, $login, $password, & $uid=0, $user_coupon_list=array())
 				} else {
 					$intersect = $coupon_ids;
 				}
-				$coupon_id = $intersect[array_rand($intersect)];
+				if (!empty($intersect)) {
+					$coupon_id = $intersect[array_rand($intersect)];
+				} else {
+					$coupon_id = $coupon_ids[array_rand($coupon_ids)];
+				}
 				
 				$r = $obj->app_exchangeCoupon($app_id , $coupon_id);
 				var_dump($r);
