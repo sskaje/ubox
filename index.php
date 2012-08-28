@@ -197,14 +197,17 @@ function gift($login_as, $login, $password, & $uid=0, $gift_phone)
 		$gu = $obj->user_isUser($gift_phone);
 		if (isset($gu['user_id'])) {
 			echo "GIFT NOW: {$uid}->{$gift_phone}\n";
-			# list
-			$cl = $obj->coupon_couponNewAdminList('free');
-			# loop gift
-			if (isset($cl['couponList']['data']) && !empty($cl['couponList']['data'])) {
-				foreach ($cl['couponList']['data'] as $coupon) {
-					if ($coupon['canPresent'] == 'yes') {
-						$r = $obj->coupon_presentCoupon($gu['user_id'], $gift_phone, $coupon['id']);
-						var_dump($r);
+			$coupon_types = array('free', 'voucher');
+			foreach ($coupon_types as $coupon_type) {
+				# list
+				$cl = $obj->coupon_couponNewAdminList($coupon_type);
+				# loop gift
+				if (isset($cl['couponList']['data']) && !empty($cl['couponList']['data'])) {
+					foreach ($cl['couponList']['data'] as $coupon) {
+						if ($coupon['canPresent'] == 'yes') {
+							$r = $obj->coupon_presentCoupon($gu['user_id'], $gift_phone, $coupon['id']);
+							var_dump($r);
+						}
 					}
 				}
 			}
